@@ -105,5 +105,25 @@ def load_quantized(model_name):
     if not pt_path:
         print("Could not find the quantized model in .pt or .safetensors format, exiting...")
         exit()
+    
+    if shared.args.pre_layer:
+        model = load_quant(str(path_to_model), str(pt_path), shared.args.wbits, shared.args.groupsize, shared.args.pre_layer)
+    else:
+        threshold = False if model_type == 'gptj' else 128
+        model = load_quant(str(path_to_model), str(pt_path), shared.args.wbits, shared.args.groupsize, kernel_switch_threshold=threshold)
+
+        # accelerate offload (doesn't work properly)
+        if shared.args.gpu_memory:
+            memory_map = list(map(lambda x : x.strip(), shared.args.gpu_memory))
+            max_cpu_memory = shared.args.cpu_memory.strip() if shared.args.cpu_memory is not None else '99GiB'
+            max_memory = {}
+            for i in range(len(memory_map)):
+                max_memory[i] = f'{memory_map[i]}GiB' if not re.match('.*ib$', memory_map[i].lower()) else memory_map[i]
+            max_memory['cpu'] = max_cpu_memory
+
+            device_map = accelerate.infer_auto_device_map(model, max_memory=max_memory, no_split_module_classes=["LlamaDecoderLayer"])
+            print("Using the following device map for the 4-bit model:", device_map)
+            # https://huggingface.co/docs/accelerate/package_reference/big_modeling#accelerate.dispatch_model
+            model = accelerate.dispatch_model(model, device_map=device_map, offload_buffers=True)
 
     return model
