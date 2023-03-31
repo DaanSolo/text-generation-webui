@@ -125,5 +125,9 @@ def load_quantized(model_name):
             print("Using the following device map for the 4-bit model:", device_map)
             # https://huggingface.co/docs/accelerate/package_reference/big_modeling#accelerate.dispatch_model
             model = accelerate.dispatch_model(model, device_map=device_map, offload_buffers=True)
+            
+        # No offload
+        elif not shared.args.cpu:
+            model = model.to(torch.device('cuda:0'))
 
     return model
